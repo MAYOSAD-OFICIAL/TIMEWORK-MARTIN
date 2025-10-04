@@ -1,11 +1,9 @@
-// Small PWA frontend for TIMEWORK (client)
-// - stores apiUrl & token in localStorage
-// - GET month totals from API (doGet)
-// - POST quick fichajes (doPost) for entry/exit
-// - renders daily, weekly, monthly views (uses doGet response: month -> days[])
+// app.js - frontend PWA para TimeWork (MARTÍN)
+// Guarda apiUrl & token en localStorage, GET month totals, POST fichajes (form-urlencoded),
+// muestra resumen diario/semana/mes.
 
 (function(){
-  // -- selectors
+  // -- selectores (asegúrate que los ids existen en tu index.html)
   const monthInput = document.getElementById('monthInput');
   const apiUrlInput = document.getElementById('apiUrl');
   const apiTokenInput = document.getElementById('apiToken');
@@ -38,9 +36,9 @@
   const LS_API = "tw_api_url_v1";
   const LS_TOKEN = "tw_api_token_v1";
 
-  // init
   function $(id){ return document.getElementById(id); }
 
+  // cargar/guardar config
   function loadConfig(){
     const url = localStorage.getItem(LS_API) || "";
     const token = localStorage.getItem(LS_TOKEN) || "";
@@ -49,9 +47,10 @@
   }
 
   function saveConfig(){
-    localStorage.setItem(LS_API, apiUrlInput.value.trim());
-    localStorage.setItem(LS_TOKEN, apiTokenInput.value.trim());
+    if(apiUrlInput) localStorage.setItem(LS_API, apiUrlInput.value.trim());
+    if(apiTokenInput) localStorage.setItem(LS_TOKEN, apiTokenInput.value.trim());
     alert("Configuración guardada.");
+    refreshAll();
   }
 
   function toggleConfig(){
@@ -72,26 +71,22 @@
     }catch(err){ alert("Error probando API: " + err.message); }
   });
 
-  // month utilities
-  function getMonthStrFromInput(){
-    return monthInput.value || getMonthStr();
-  }
+  // meses
   function getMonthStr(){
+    const v = monthInput && monthInput.value;
+    if(v && v.length===7 && v.indexOf("-")!==-1) return v;
     const d = new Date();
-    const y = d.getFullYear();
-    const m = ("0"+(d.getMonth()+1)).slice(-2);
-    return `${y}-${m}`;
+    return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);
   }
-
   function initMonthInput(){
-    const cur = getMonthStr();
-    if(monthInput) monthInput.value = cur;
+    if(!monthInput) return;
+    monthInput.value = getMonthStr();
   }
 
-  // fetch totals for selected month
+  // GET month totals
   async function fetchMonthTotals(monthStr){
-    const url = (apiUrlInput.value || localStorage.getItem(LS_API) || "").trim();
-    const token = (apiTokenInput.value || localStorage.getItem(LS_TOKEN) || "").trim();
+    const url = (apiUrlInput && apiUrlInput.value) || localStorage.getItem(LS_API) || "";
+    const token = (apiTokenInput && apiTokenInput.value) || localStorage.getItem(LS_TOKEN) || "";
     if(!url) {
       console.warn("No API URL configured");
       return null;
@@ -103,52 +98,54 @@
     return j;
   }
 
-  // format utilities
-  function fracToHHMM(frac){
-    if(!frac) return "00:00";
-    const totalMin = Math.round(frac * 24 * 60);
-    const hh = Math.floor(totalMin/60);
-    const mm = totalMin % 60;
-    return ("0"+hh).slice(-2)+":"+("0"+mm).slice(-2);
-  }
-  function formatDateHuman(isoDate){
-    const d = new Date(isoDate);
-    return d.toLocaleDateString();
-  }
+  // utilidades
   function isoToday(){
     const d = new Date();
     return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
   }
-  function timeNowHHmm(){
-    const d = new Date();
-    return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
-  }
 
-  // render routines
+  // display daily from API (use daily_summary if present)
   function renderDailyFromMonthData(monthJson){
-    const todayKey = isoToday();
+    if(!d_date) return;
     d_date.textContent = (new Date()).toLocaleDateString();
-    let entry = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === todayKey) : null;
-    if(entry){
-      d_worked.textContent = entry.worked_text || "00:00";
+
+    if(monthJson && monthJson.daily_summary){
+      const s = monthJson.daily_summary;
+      // mostrar datos si existen
+      d_worked.textContent = s.trabajado_total || "00:00";
+      d_entry.textContent = s.entrada || "—";
+      d_exit.textContent = s.salida || "—";
+      d_total_break.textContent = s.descanso_total || "—";
+      d_used_break.textContent = s.descanso_usado || "—";
+      d_avail_break.textContent = s.descanso_disponible || "—";
+      d_debt.textContent = s.horas_a_deber || "—";
+      if(s.date){
+        try {
+          const d = new Date(s.date);
+          if(!isNaN(d.getTime())) d_date.textContent = d.toLocaleDateString();
+        } catch(e){}
+      }
     } else {
-      d_worked.textContent = "00:00";
+      // fallback: buscar today in days
+      const todayKey = isoToday();
+      const entry = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === todayKey) : null;
+      d_worked.textContent = entry ? (entry.worked_text || "00:00") : "00:00";
+      d_entry.textContent = "—";
+      d_exit.textContent = "—";
+      d_total_break.textContent = "—";
+      d_used_break.textContent = "—";
+      d_avail_break.textContent = "—";
+      d_debt.textContent = "—";
     }
-    d_entry.textContent = "— (editar en Drive)";
-    d_exit.textContent = "— (editar en Drive)";
-    d_total_break.textContent = "— (editar en Drive)";
-    d_used_break.textContent = "— (editar en Drive)";
-    d_avail_break.textContent = "—";
-    d_debt.textContent = "—";
   }
 
   function renderWeeklyFromMonthData(monthJson){
     if(!weeklyGrid) return;
     weeklyGrid.innerHTML = "";
     const today = new Date();
-    const monday = new Date(today);
     const wd = today.getDay();
     const offset = (wd === 0) ? -6 : (1 - wd);
+    const monday = new Date(today);
     monday.setDate(today.getDate() + offset);
 
     for(let i=0;i<5;i++){
@@ -200,63 +197,60 @@
     }
   }
 
-  // load & render full view for current selected month
+  // reload whole view
   async function refreshAll(){
     try{
-      const monthStr = getMonthStrFromInput();
+      const monthStr = getMonthStr();
       const [y,m] = monthStr.split("-");
       const d = new Date(parseInt(y,10), parseInt(m,10)-1, 1);
       if(monthLabel) monthLabel.textContent = d.toLocaleString(undefined, { month:'long', year:'numeric' });
       const json = await fetchMonthTotals(monthStr);
-      if(!json) {
-        if(d_worked) d_worked.textContent = "00:00";
-        if(weeklyGrid) weeklyGrid.innerHTML = "";
-        if(monthlyGrid) monthlyGrid.innerHTML = "";
+      if(!json){
+        d_worked.textContent = "00:00";
+        weeklyGrid.innerHTML = "";
+        monthlyGrid.innerHTML = "";
         return;
       }
       renderDailyFromMonthData(json);
       renderWeeklyFromMonthData(json);
       buildMonthlyGrid(json, parseInt(y,10), parseInt(m,10)-1);
-    }catch(err){
+    } catch(err){
       console.error(err);
-      // no alert masiva, solo en consola
-      // pero si quieres aviso:
-      // alert("Error cargando datos: " + err.message);
+      alert("Error cargando datos: " + err.message);
     }
   }
 
-  // POST helper to add ficha (send as application/x-www-form-urlencoded to avoid preflight)
+  // POST fichaje -> usamos URLSearchParams para evitar preflight
   async function postFicha(payload){
-    const url = (apiUrlInput.value || localStorage.getItem(LS_API) || "").trim();
-    const token = (apiTokenInput.value || localStorage.getItem(LS_TOKEN) || "").trim();
+    const url = (apiUrlInput && apiUrlInput.value) || localStorage.getItem(LS_API) || "";
+    const token = (apiTokenInput && apiTokenInput.value) || localStorage.getItem(LS_TOKEN) || "";
     if(!url) return alert("Configura la API URL en el engranaje");
-    const p = Object.assign({}, payload);
-    if(token) p.token = token;
 
-    // build form body
-    const form = new URLSearchParams();
-    for (const k in p) {
-      if (Object.prototype.hasOwnProperty.call(p, k)) form.append(k, p[k]);
-    }
+    // construir body x-www-form-urlencoded
+    const params = new URLSearchParams();
+    for(const k in payload){ if(payload[k] !== undefined && payload[k] !== null) params.append(k, payload[k]); }
+    if(token) params.append('token', token);
 
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form.toString()
+      body: params.toString(),
+      // NO setear headers personalizados -> evita preflight en la mayoría de setups
+      // browser sets Content-Type to application/x-www-form-urlencoded; charset=UTF-8 automatically
     });
-
-    let j;
-    try { j = await resp.json(); } catch(e){ throw new Error("invalid server response"); }
-
-    if (j && j.ok) return true;
+    if(!resp.ok) {
+      let txt = await resp.text();
+      throw new Error("HTTP "+resp.status + " " + txt);
+    }
+    const j = await resp.json();
+    if(j && j.ok) return true;
     throw new Error(j && j.error ? j.error : "error en servidor");
   }
 
-  // button handlers
+  // handlers
   if(btnEntry) btnEntry.addEventListener('click', async function(){
     if(!confirm("Registrar ENTRADA rápida (nota: WORKING)?")) return;
     const fecha = isoToday();
-    const time = timeNowHHmm();
+    const time = (new Date()).toTimeString().slice(0,8);
     const payload = { fecha: fecha, entrada: time, salida: time, nota: "WORKING" };
     try{
       await postFicha(payload);
@@ -276,7 +270,7 @@
     btn.addEventListener('click', async function(e){
       const note = e.currentTarget.dataset.note || "BREAK";
       const fecha = isoToday();
-      const time = timeNowHHmm();
+      const time = (new Date()).toTimeString().slice(0,8);
       const payload = { fecha: fecha, entrada: time, salida: time, nota: note };
       if(exitModal) exitModal.classList.add('hidden');
       try{
@@ -309,26 +303,26 @@
 
   if(monthInput) monthInput.addEventListener('change', refreshAll);
 
-  // initialization
+  // init
   loadConfig();
   initMonthInput();
   refreshAll();
+
+  // save config on blur (optional)
+  if(apiUrlInput) apiUrlInput.addEventListener('blur', saveConfig);
+  if(apiTokenInput) apiTokenInput.addEventListener('blur', saveConfig);
 
   document.addEventListener('DOMContentLoaded', function(){
     loadConfig();
   });
 
-})();
+  // registrar service worker (si existe)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(reg => console.log('ServiceWorker registrado:', reg.scope))
+        .catch(err => console.warn('ServiceWorker NO registrado:', err));
+    });
+  }
 
-// -------------------- Service Worker registration --------------------
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./service-worker.js')
-      .then(reg => {
-        console.log('ServiceWorker registrado:', reg.scope);
-      })
-      .catch(err => {
-        console.warn('ServiceWorker NO registrado:', err);
-      });
-  });
-}
+})();

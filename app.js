@@ -1,9 +1,10 @@
-// app.js - frontend PWA para TimeWork (MARTÍN)
-// Guarda apiUrl & token en localStorage, GET month totals, POST fichajes (form-urlencoded),
-// muestra resumen diario/semana/mes.
+// app.js - PWA frontend completo para TimeWork
+// (pegalo entero en tu archivo app.js)
 
-(function(){
-  // -- selectores (asegúrate que los ids existen en tu index.html)
+(function () {
+  'use strict';
+
+  // ---------- Selectores ----------
   const monthInput = document.getElementById('monthInput');
   const apiUrlInput = document.getElementById('apiUrl');
   const apiTokenInput = document.getElementById('apiToken');
@@ -32,181 +33,187 @@
   const prevMonth = document.getElementById('prevMonth');
   const nextMonth = document.getElementById('nextMonth');
 
-  // local storage keys
-  const LS_API = "tw_api_url_v1";
-  const LS_TOKEN = "tw_api_token_v1";
+  // localStorage keys
+  const LS_API = 'tw_api_url_v1';
+  const LS_TOKEN = 'tw_api_token_v1';
 
-  function $(id){ return document.getElementById(id); }
-
-  // --- FIX: asegurar modal oculto al inicio y comportamiento de cierre ---
-  if(exitModal){
-    // Forzar oculto en carga (protección contra versiones anteriores que pudieron dejarlo visible)
-    exitModal.classList.add('hidden');
-
-    // Cerrar si el usuario hace click en el overlay (clic fuera del cuadro)
-    exitModal.addEventListener('click', function(e){
-      if(e.target === exitModal){ exitModal.classList.add('hidden'); }
-    });
-
-    // Cerrar con Escape
-    document.addEventListener('keydown', function(e){
-      if(e.key === 'Escape' && !exitModal.classList.contains('hidden')){
-        exitModal.classList.add('hidden');
-      }
-    });
-  }
-  // --- end FIX ---
-
-  // cargar/guardar config
-  function loadConfig(){
-    const url = localStorage.getItem(LS_API) || "";
-    const token = localStorage.getItem(LS_TOKEN) || "";
-    if(apiUrlInput) apiUrlInput.value = url;
-    if(apiTokenInput) apiTokenInput.value = token;
+  // ---- utilidades de fecha/tiempo ----
+  function getMonthStr() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = ('0' + (d.getMonth() + 1)).slice(-2);
+    return `${y}-${m}`;
   }
 
-  function saveConfig(){
-    if(apiUrlInput) localStorage.setItem(LS_API, apiUrlInput.value.trim());
-    if(apiTokenInput) localStorage.setItem(LS_TOKEN, apiTokenInput.value.trim());
-    alert("Configuración guardada.");
-    refreshAll();
+  function isoToday() {
+    const d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
 
-  function toggleConfig(){
-    if(!configPanel) return;
+  function timeNowHHmm() {
+    const d = new Date();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  function fracToHHMM(frac) {
+    if (!frac && frac !== 0) return '00:00';
+    const totalMin = Math.round(frac * 24 * 60);
+    const hh = Math.floor(totalMin / 60);
+    const mm = totalMin % 60;
+    return ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
+  }
+
+  function formatDateHuman(isoDate) {
+    if (!isoDate) return '';
+    const d = new Date(isoDate);
+    if (isNaN(d.getTime())) return isoDate;
+    return d.toLocaleDateString();
+  }
+
+  // ---------- Config load/save ----------
+  function loadConfig() {
+    try {
+      const url = localStorage.getItem(LS_API) || '';
+      const token = localStorage.getItem(LS_TOKEN) || '';
+      if (apiUrlInput) apiUrlInput.value = url;
+      if (apiTokenInput) apiTokenInput.value = token;
+    } catch (err) {
+      console.warn('loadConfig err', err);
+    }
+  }
+
+  function saveConfig() {
+    try {
+      if (apiUrlInput) localStorage.setItem(LS_API, apiUrlInput.value.trim());
+      if (apiTokenInput) localStorage.setItem(LS_TOKEN, apiTokenInput.value.trim());
+      alert('Configuración guardada.');
+    } catch (err) {
+      console.warn('saveConfig err', err);
+    }
+  }
+
+  function toggleConfig() {
+    if (!configPanel) return;
     configPanel.classList.toggle('hidden');
   }
 
-  if(gearBtn) gearBtn.addEventListener('click', toggleConfig);
-  if(saveConfigBtn) saveConfigBtn.addEventListener('click', saveConfig);
-  if(testConfigBtn) testConfigBtn.addEventListener('click', async function(){
-    try{
-      const url = apiUrlInput.value.trim();
-      const token = apiTokenInput.value.trim();
-      if(!url) return alert("Introduce API URL");
-      const resp = await fetch(url + '?month=' + getMonthStr() + '&token=' + encodeURIComponent(token));
-      const j = await resp.json();
-      alert("Respuesta recibida: " + (j.month || "OK"));
-    }catch(err){ alert("Error probando API: " + err.message); }
-  });
-
-  // meses
-  function getMonthStr(){
-    const v = monthInput && monthInput.value;
-    if(v && v.length===7 && v.indexOf("-")!==-1) return v;
-    const d = new Date();
-    return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);
-  }
-  function initMonthInput(){
-    if(!monthInput) return;
-    monthInput.value = getMonthStr();
-  }
-
-  // GET month totals
-  async function fetchMonthTotals(monthStr){
-    const url = (apiUrlInput && apiUrlInput.value) || localStorage.getItem(LS_API) || "";
-    const token = (apiTokenInput && apiTokenInput.value) || localStorage.getItem(LS_TOKEN) || "";
-    if(!url) {
-      console.warn("No API URL configured");
+  // ---------- Fetch month totals (GET) ----------
+  async function fetchMonthTotals(monthStr) {
+    const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || '').trim();
+    const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || '').trim();
+    if (!url) {
+      console.warn('No API URL configured');
       return null;
     }
-    const q = `${url}?month=${encodeURIComponent(monthStr)}${token?("&token="+encodeURIComponent(token)):""}`;
+    const q = url + '?month=' + encodeURIComponent(monthStr) + (token ? ('&token=' + encodeURIComponent(token)) : '');
     const resp = await fetch(q);
-    if(!resp.ok) throw new Error("HTTP "+resp.status);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const j = await resp.json();
     return j;
   }
 
-  // utilidades
-  function isoToday(){
-    const d = new Date();
-    return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
-  }
+  // ---------- Render helpers ----------
+  function renderDailyFromMonthData(monthJson) {
+    // show date
+    if (d_date) d_date.textContent = (new Date()).toLocaleDateString();
 
-  // display daily from API (use daily_summary if present)
-  function renderDailyFromMonthData(monthJson){
-    if(!d_date) return;
-    d_date.textContent = (new Date()).toLocaleDateString();
+    // prefer daily_summary if present
+    const ds = (monthJson && monthJson.daily_summary) ? monthJson.daily_summary : null;
 
-    if(monthJson && monthJson.daily_summary){
-      const s = monthJson.daily_summary;
-      // mostrar datos si existen
-      d_worked.textContent = s.trabajado_total || "00:00";
-      d_entry.textContent = s.entrada || "—";
-      d_exit.textContent = s.salida || "—";
-      d_total_break.textContent = s.descanso_total || "—";
-      d_used_break.textContent = s.descanso_usado || "—";
-      d_avail_break.textContent = s.descanso_disponible || "—";
-      d_debt.textContent = s.horas_a_deber || "—";
-      if(s.date){
-        try {
-          const d = new Date(s.date);
-          if(!isNaN(d.getTime())) d_date.textContent = d.toLocaleDateString();
-        } catch(e){}
+    function showOrDash(value, driveHint) {
+      if (value === null || value === undefined || value === '') {
+        return driveHint ? '— (editar en Drive)' : '—';
+      }
+      return value;
+    }
+
+    // entrada / salida / descanso: use daily_summary if available
+    if (ds) {
+      if (d_entry) d_entry.textContent = showOrDash(ds.entrada, true);
+      if (d_exit) d_exit.textContent = showOrDash(ds.salida, true);
+      if (d_total_break) d_total_break.textContent = showOrDash(ds.descanso_total, true);
+      if (d_used_break) d_used_break.textContent = showOrDash(ds.descanso_usado, true);
+      if (d_avail_break) d_avail_break.textContent = showOrDash(ds.descanso_disponible, true);
+      if (d_debt) d_debt.textContent = showOrDash(ds.horas_a_deber, true);
+      if (d_worked) {
+        // prefer daily_summary.trabajado_total, else fallback to days array for today
+        if (ds.trabajado_total) d_worked.textContent = ds.trabajado_total;
+        else {
+          // fallback: search today's worked_text
+          const today = isoToday();
+          const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === today) : null;
+          d_worked.textContent = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
+        }
       }
     } else {
-      // fallback: buscar today in days
-      const todayKey = isoToday();
-      const entry = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === todayKey) : null;
-      d_worked.textContent = entry ? (entry.worked_text || "00:00") : "00:00";
-      d_entry.textContent = "—";
-      d_exit.textContent = "—";
-      d_total_break.textContent = "—";
-      d_used_break.textContent = "—";
-      d_avail_break.textContent = "—";
-      d_debt.textContent = "—";
+      // no daily summary: show default/hints and worked total from month data
+      if (d_entry) d_entry.textContent = '— (editar en Drive)';
+      if (d_exit) d_exit.textContent = '— (editar en Drive)';
+      if (d_total_break) d_total_break.textContent = '— (editar en Drive)';
+      if (d_used_break) d_used_break.textContent = '— (editar en Drive)';
+      if (d_avail_break) d_avail_break.textContent = '—';
+      if (d_debt) d_debt.textContent = '—';
+      if (d_worked) {
+        const today = isoToday();
+        const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === today) : null;
+        d_worked.textContent = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
+      }
     }
   }
 
-  function renderWeeklyFromMonthData(monthJson){
-    if(!weeklyGrid) return;
-    weeklyGrid.innerHTML = "";
+  function renderWeeklyFromMonthData(monthJson) {
+    if (!weeklyGrid) return;
+    weeklyGrid.innerHTML = '';
+
     const today = new Date();
-    const wd = today.getDay();
-    const offset = (wd === 0) ? -6 : (1 - wd);
+    // compute Monday of this week
+    const wd = today.getDay(); // 0..6 sun..sat
+    const offset = (wd === 0) ? -6 : (1 - wd); // make Monday
     const monday = new Date(today);
     monday.setDate(today.getDate() + offset);
 
-    for(let i=0;i<5;i++){
+    for (let i = 0; i < 5; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      const key = d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
+      const key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
       const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === key) : null;
-      const hours = dayObj ? dayObj.worked_text : "00:00";
+      const hours = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
+
       const container = document.createElement('div');
       container.className = 'week-day';
-      container.innerHTML = `<div class="wk-name">${d.toLocaleDateString(undefined,{ weekday:'long' })}</div>
-                             <div class="wk-date">${("0"+d.getDate()).slice(-2)}/${("0"+(d.getMonth()+1)).slice(-2)}</div>
+      container.innerHTML = `<div class="wk-name">${d.toLocaleDateString(undefined, { weekday: 'long' })}</div>
+                             <div class="wk-date">${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}</div>
                              <div class="wk-hours">${hours}</div>`;
       weeklyGrid.appendChild(container);
     }
   }
 
-  function buildMonthlyGrid(monthJson, year, monthIndex){
-    if(!monthlyGrid) return;
-    monthlyGrid.innerHTML = "";
+  function buildMonthlyGrid(monthJson, year, monthIndex) {
+    if (!monthlyGrid) return;
+    monthlyGrid.innerHTML = '';
+
     const firstOfMonth = new Date(year, monthIndex, 1);
-    const weekday = firstOfMonth.getDay();
+    const weekday = firstOfMonth.getDay(); // 0 sun
     const offsetToMonday = (weekday === 0) ? -6 : (1 - weekday);
     const gridStart = new Date(firstOfMonth);
     gridStart.setDate(firstOfMonth.getDate() + offsetToMonday);
 
-    const daysInMonth = new Date(year, monthIndex+1, 0).getDate();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     const lastOfMonth = new Date(year, monthIndex, daysInMonth);
-    const daysFromGridStartToLast = Math.round((lastOfMonth.getTime()-gridStart.getTime())/(24*3600*1000)) + 1;
-    const weeksNeeded = Math.min(6, Math.max(1, Math.ceil(daysFromGridStartToLast/7)));
+    const daysFromGridStartToLast = Math.round((lastOfMonth.getTime() - gridStart.getTime()) / (24 * 3600 * 1000)) + 1;
+    const weeksNeeded = Math.min(6, Math.max(1, Math.ceil(daysFromGridStartToLast / 7)));
 
-    for(let w=0; w<weeksNeeded; w++){
-      for(let dow=0; dow<5; dow++){
+    for (let w = 0; w < weeksNeeded; w++) {
+      for (let dow = 0; dow < 5; dow++) {
         const d = new Date(gridStart);
-        d.setDate(gridStart.getDate() + w*7 + dow);
+        d.setDate(gridStart.getDate() + w * 7 + dow);
         const cell = document.createElement('div');
         cell.className = 'month-cell';
-        if(d.getMonth() === monthIndex){
-          const key = d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
+        if (d.getMonth() === monthIndex) {
+          const key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
           const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === key) : null;
-          const hoursText = dayObj ? dayObj.worked_text : "00:00";
-          cell.innerHTML = `<div class="date">${("0"+d.getDate()).slice(-2)}/${("0"+(d.getMonth()+1)).slice(-2)}/${d.getFullYear()}</div>
+          const hoursText = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
+          cell.innerHTML = `<div class="date">${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}/${d.getFullYear()}</div>
                             <div class="hours">${hoursText}</div>`;
         } else {
           cell.innerHTML = `<div class="date"></div><div class="hours"></div>`;
@@ -216,132 +223,180 @@
     }
   }
 
-  // reload whole view
-  async function refreshAll(){
-    try{
-      const monthStr = getMonthStr();
-      const [y,m] = monthStr.split("-");
-      const d = new Date(parseInt(y,10), parseInt(m,10)-1, 1);
-      if(monthLabel) monthLabel.textContent = d.toLocaleString(undefined, { month:'long', year:'numeric' });
+  // ---------- Refresh full view ----------
+  async function refreshAll() {
+    try {
+      const monthStr = (monthInput && monthInput.value) ? monthInput.value : getMonthStr();
+      // set monthLabel
+      const [y, m] = monthStr.split('-');
+      const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+      if (monthLabel) monthLabel.textContent = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
       const json = await fetchMonthTotals(monthStr);
-      if(!json){
-        if(d_worked) d_worked.textContent = "00:00";
-        if(weeklyGrid) weeklyGrid.innerHTML = "";
-        if(monthlyGrid) monthlyGrid.innerHTML = "";
+      if (!json) {
+        if (d_worked) d_worked.textContent = '00:00';
+        if (weeklyGrid) weeklyGrid.innerHTML = '';
+        if (monthlyGrid) monthlyGrid.innerHTML = '';
         return;
       }
       renderDailyFromMonthData(json);
       renderWeeklyFromMonthData(json);
-      buildMonthlyGrid(json, parseInt(y,10), parseInt(m,10)-1);
-    } catch(err){
-      console.error(err);
-      alert("Error cargando datos: " + err.message);
+      buildMonthlyGrid(json, parseInt(y, 10), parseInt(m, 10) - 1);
+    } catch (err) {
+      console.error('refreshAll err', err);
+      // show user friendly alert but avoid spamming
+      // alert('Error cargando datos: ' + err.message);
     }
   }
 
-  // POST fichaje -> usamos URLSearchParams para evitar preflight
-  async function postFicha(payload){
-    const url = (apiUrlInput && apiUrlInput.value) || localStorage.getItem(LS_API) || "";
-    const token = (apiTokenInput && apiTokenInput.value) || localStorage.getItem(LS_TOKEN) || "";
-    if(!url) return alert("Configura la API URL en el engranaje");
+  // ---------- POST helper (form-urlencoded) ----------
+  async function postFicha(payload) {
+    const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || '').trim();
+    const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || '').trim();
+    if (!url) return alert('Configura la API URL en el engranaje');
 
-    // construir body x-www-form-urlencoded
-    const params = new URLSearchParams();
-    for(const k in payload){ if(payload[k] !== undefined && payload[k] !== null) params.append(k, payload[k]); }
-    if(token) params.append('token', token);
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      body: params.toString(),
-      // NO setear headers personalizados -> evita preflight en la mayoría de setups
-      // browser sets Content-Type to application/x-www-form-urlencoded; charset=UTF-8 automatically
-    });
-    if(!resp.ok) {
-      let txt = await resp.text();
-      throw new Error("HTTP "+resp.status + " " + txt);
+    // build application/x-www-form-urlencoded body
+    const form = new URLSearchParams();
+    for (const k in payload) {
+      if (Object.prototype.hasOwnProperty.call(payload, k)) {
+        const v = payload[k];
+        if (v !== undefined && v !== null) form.append(k, String(v));
+      }
     }
-    const j = await resp.json();
-    if(j && j.ok) return true;
-    throw new Error(j && j.error ? j.error : "error en servidor");
+    if (token) form.append('token', token);
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: form.toString()
+      });
+    } catch (err) {
+      throw new Error('Failed to fetch: ' + err.message);
+    }
+
+    const text = await resp.text();
+    let json;
+    try { json = text ? JSON.parse(text) : {}; } catch (e) { json = { error: text }; }
+
+    if (!resp.ok) {
+      throw new Error(json && json.error ? json.error : ('HTTP ' + resp.status));
+    }
+    if (json && json.ok) return true;
+    throw new Error(json && json.error ? json.error : 'Respuesta inesperada del servidor');
   }
 
-  // handlers
-  if(btnEntry) btnEntry.addEventListener('click', async function(){
-    if(!confirm("Registrar ENTRADA rápida (nota: WORKING)?")) return;
-    const fecha = isoToday();
-    const time = (new Date()).toTimeString().slice(0,8);
-    const payload = { fecha: fecha, entrada: time, salida: time, nota: "WORKING" };
-    try{
+  // ---------- Button handlers ----------
+  async function onEntryClicked() {
+    try {
+      if (!confirm('Registrar ENTRADA rápida (nota: WORKING)?')) return;
+      const fecha = isoToday();
+      const time = timeNowHHmm();
+      const payload = { fecha: fecha, entrada: time, salida: time, nota: 'WORKING' };
       await postFicha(payload);
       await refreshAll();
-    }catch(err){ alert("Error al crear fichaje: " + err.message); }
-  });
+    } catch (err) {
+      alert('Error al crear fichaje: ' + err.message);
+    }
+  }
 
-  if(btnExit) btnExit.addEventListener('click', function(){
-    if(exitModal) exitModal.classList.remove('hidden');
-  });
+  function openExitModal() {
+    if (!exitModal) return;
+    exitModal.classList.remove('hidden');
+  }
 
-  if(exitCancel) exitCancel.addEventListener('click', function(){
-    if(exitModal) exitModal.classList.add('hidden');
-  });
+  function closeExitModal() {
+    if (!exitModal) return;
+    exitModal.classList.add('hidden');
+  }
 
-  document.querySelectorAll('.exit-option').forEach(btn=>{
-    btn.addEventListener('click', async function(e){
-      const note = e.currentTarget.dataset.note || "BREAK";
+  async function onExitOptionSelected(note) {
+    try {
       const fecha = isoToday();
-      const time = (new Date()).toTimeString().slice(0,8);
+      const time = timeNowHHmm();
       const payload = { fecha: fecha, entrada: time, salida: time, nota: note };
-      if(exitModal) exitModal.classList.add('hidden');
-      try{
-        await postFicha(payload);
-        await refreshAll();
-      }catch(err){
-        alert("Error al crear fichaje: " + err.message);
+      closeExitModal();
+      await postFicha(payload);
+      await refreshAll();
+    } catch (err) {
+      alert('Error al crear fichaje: ' + err.message);
+    }
+  }
+
+  // ---------- Month navigation ----------
+  function setMonthInputToCurrent() {
+    if (!monthInput) return;
+    monthInput.value = getMonthStr();
+  }
+
+  function shiftMonth(delta) {
+    if (!monthInput) return;
+    const v = monthInput.value;
+    if (!v) return;
+    const [y, mm] = v.split('-');
+    const d = new Date(parseInt(y, 10), parseInt(mm, 10) - 1, 1);
+    d.setMonth(d.getMonth() + delta);
+    monthInput.value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    refreshAll();
+  }
+
+  // ---------- Event wiring ----------
+  function wireEvents() {
+    if (gearBtn) gearBtn.addEventListener('click', toggleConfig);
+    if (saveConfigBtn) saveConfigBtn.addEventListener('click', saveConfig);
+    if (testConfigBtn) testConfigBtn.addEventListener('click', async function () {
+      try {
+        const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || '').trim();
+        const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || '').trim();
+        if (!url) return alert('Introduce API URL');
+        const resp = await fetch(url + '?month=' + encodeURIComponent((monthInput && monthInput.value) ? monthInput.value : getMonthStr()) + (token ? ('&token=' + encodeURIComponent(token)) : ''));
+        const j = await resp.json();
+        alert('Respuesta recibida: ' + (j.month || 'OK'));
+      } catch (err) {
+        alert('Error probando API: ' + (err.message || err));
       }
     });
-  });
 
-  if(prevMonth) prevMonth.addEventListener('click', function(){
-    const v = monthInput.value;
-    if(!v) return;
-    const [y,mm] = v.split("-");
-    const d = new Date(parseInt(y,10), parseInt(mm,10)-1, 1);
-    d.setMonth(d.getMonth() - 1);
-    monthInput.value = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2);
-    refreshAll();
-  });
-  if(nextMonth) nextMonth.addEventListener('click', function(){
-    const v = monthInput.value;
-    if(!v) return;
-    const [y,mm] = v.split("-");
-    const d = new Date(parseInt(y,10), parseInt(mm,10)-1, 1);
-    d.setMonth(d.getMonth() + 1);
-    monthInput.value = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2);
-    refreshAll();
-  });
+    if (btnEntry) btnEntry.addEventListener('click', onEntryClicked);
+    if (btnExit) btnExit.addEventListener('click', openExitModal);
+    if (exitCancel) exitCancel.addEventListener('click', closeExitModal);
 
-  if(monthInput) monthInput.addEventListener('change', refreshAll);
+    // exit option buttons (expect elements with class .exit-option and data-note attribute)
+    document.querySelectorAll('.exit-option').forEach(btn => {
+      btn.addEventListener('click', function (e) {
+        const note = e.currentTarget.dataset.note || 'BREAK';
+        onExitOptionSelected(note);
+      });
+    });
 
-  // init
-  loadConfig();
-  initMonthInput();
-  refreshAll();
+    if (prevMonth) prevMonth.addEventListener('click', function () { shiftMonth(-1); });
+    if (nextMonth) nextMonth.addEventListener('click', function () { shiftMonth(1); });
+    if (monthInput) monthInput.addEventListener('change', refreshAll);
+  }
 
-  // save config on blur (optional)
-  if(apiUrlInput) apiUrlInput.addEventListener('blur', saveConfig);
-  if(apiTokenInput) apiTokenInput.addEventListener('blur', saveConfig);
-
-  document.addEventListener('DOMContentLoaded', function(){
+  // ---------- Initialization ----------
+  document.addEventListener('DOMContentLoaded', function () {
     loadConfig();
+    setMonthInputToCurrent();
+    wireEvents();
+    // refresh view (no alert on failure)
+    refreshAll();
   });
 
-  // registrar service worker (si existe)
+  // ---------- Service Worker registration (PWA) ----------
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
+    window.addEventListener('load', function () {
       navigator.serviceWorker.register('./service-worker.js')
-        .then(reg => console.log('ServiceWorker registrado:', reg.scope))
-        .catch(err => console.warn('ServiceWorker NO registrado:', err));
+        .then(reg => {
+          console.log('ServiceWorker registrado:', reg.scope);
+        })
+        .catch(err => {
+          console.warn('ServiceWorker NO registrado:', err);
+        });
     });
   }
 
-})();
+})(); // fin IIFE

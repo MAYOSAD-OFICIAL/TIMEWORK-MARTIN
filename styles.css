@@ -1,0 +1,20 @@
+:root{
+  --accent:#3aa6a4;
+  --muted:#bfecec;
+  --text:#163a3a;
+}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;background:#f8faf9;color:var(--text)}
+.container{max-width:920px;margin:28px auto;padding:18px;background:#fff;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
+h1{margin:0 0 18px;font-size:32px;color:var(--accent)}
+.config{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.config label{display:flex;flex-direction:column;font-size:13px;color:#3b6c6b}
+.config input[type="text"],.config input[type="month"]{padding:10px;border-radius:8px;border:1px solid #d5e7e6;background:#fff;min-width:260px}
+.buttons{display:flex;gap:8px;margin-left:auto}
+button{background:var(--accent);border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+button:active{transform:translateY(1px)}
+.result{margin-top:20px}
+#calendarRoot{margin-top:6px}
+.calendar{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.cell{border:2px solid #2a9d9b;background:#e8f8f8;padding:10px;border-radius:4px;min-height:54px}
+.cell .date{font-size:13px;color:#2f9fa0;text-align:center}
+.cell .hours{font-weight:600;text-align:center;margin-top:8px}

@@ -168,3 +168,5 @@ body{
   .grid-month{grid-template-columns:repeat(2,1fr)}
   .grid-week{flex-direction:column;align-items:center}
 }
+.hidden { display: none !important; }
+

@@ -201,22 +201,33 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // POST helper to add ficha
-  async function postFicha(payload){
-    const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || "").trim();
-    const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || "").trim();
-    if(!url) return alert("Configura la API URL en el engranaje");
-    const p = Object.assign({}, payload);
-    if(token) p.token = token;
-    const resp = await fetch(url, {
-      method:'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(p)
-    });
-    const j = await resp.json();
-    if(j && j.ok) return true;
-    throw new Error(j && j.error ? j.error : "error en servidor");
+// POST helper to add ficha (send as application/x-www-form-urlencoded to avoid preflight)
+async function postFicha(payload){
+  const url = (apiUrlInput.value || localStorage.getItem(LS_API) || "").trim();
+  const token = (apiTokenInput.value || localStorage.getItem(LS_TOKEN) || "").trim();
+  if(!url) return alert("Configura la API URL en el engranaje");
+  const p = Object.assign({}, payload);
+  if(token) p.token = token;
+
+  // build form body
+  const form = new URLSearchParams();
+  for (const k in p) {
+    if (Object.prototype.hasOwnProperty.call(p, k)) form.append(k, p[k]);
   }
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString()
+  });
+
+  // try parse json response
+  let j;
+  try { j = await resp.json(); } catch(e){ throw new Error("invalid server response"); }
+
+  if (j && j.ok) return true;
+  throw new Error(j && j.error ? j.error : "error en servidor");
+}
 
   // --- event wiring ---
   if(gearBtn) gearBtn.addEventListener('click', toggleConfig);

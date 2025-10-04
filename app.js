@@ -323,3 +323,15 @@
   });
 
 })();
+// -------------------- Service Worker registration --------------------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(reg => {
+        console.log('ServiceWorker registrado:', reg.scope);
+      })
+      .catch(err => {
+        console.warn('ServiceWorker NO registrado:', err);
+      });
+  });
+}

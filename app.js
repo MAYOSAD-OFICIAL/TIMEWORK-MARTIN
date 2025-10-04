@@ -1,9 +1,11 @@
-// app.js — PWA frontend TIMEWORK (versión corregida: DOMContentLoaded)
-'use strict';
+// Small PWA frontend for TIMEWORK (client)
+// - stores apiUrl & token in localStorage
+// - GET month totals from API (doGet)
+// - POST quick fichajes (doPost) for entry/exit
+// - renders daily, weekly, monthly views (uses doGet response: month -> days[])
 
-document.addEventListener('DOMContentLoaded', function() {
-
-  // -- selectors (asegúrate de que en el HTML existan estos ids)
+(function(){
+  // -- selectors
   const monthInput = document.getElementById('monthInput');
   const apiUrlInput = document.getElementById('apiUrl');
   const apiTokenInput = document.getElementById('apiToken');
@@ -36,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const LS_API = "tw_api_url_v1";
   const LS_TOKEN = "tw_api_token_v1";
 
-  // --- helpers / utilidades ---
+  // init
   function $(id){ return document.getElementById(id); }
 
   function loadConfig(){
@@ -47,16 +49,33 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function saveConfig(){
-    if(apiUrlInput) localStorage.setItem(LS_API, apiUrlInput.value.trim());
-    if(apiTokenInput) localStorage.setItem(LS_TOKEN, apiTokenInput.value.trim());
+    localStorage.setItem(LS_API, apiUrlInput.value.trim());
+    localStorage.setItem(LS_TOKEN, apiTokenInput.value.trim());
     alert("Configuración guardada.");
   }
 
   function toggleConfig(){
-    if(configPanel) configPanel.classList.toggle('hidden');
+    if(!configPanel) return;
+    configPanel.classList.toggle('hidden');
   }
 
-  // month utils
+  if(gearBtn) gearBtn.addEventListener('click', toggleConfig);
+  if(saveConfigBtn) saveConfigBtn.addEventListener('click', saveConfig);
+  if(testConfigBtn) testConfigBtn.addEventListener('click', async function(){
+    try{
+      const url = apiUrlInput.value.trim();
+      const token = apiTokenInput.value.trim();
+      if(!url) return alert("Introduce API URL");
+      const resp = await fetch(url + '?month=' + getMonthStr() + '&token=' + encodeURIComponent(token));
+      const j = await resp.json();
+      alert("Respuesta recibida: " + (j.month || "OK"));
+    }catch(err){ alert("Error probando API: " + err.message); }
+  });
+
+  // month utilities
+  function getMonthStrFromInput(){
+    return monthInput.value || getMonthStr();
+  }
   function getMonthStr(){
     const d = new Date();
     const y = d.getFullYear();
@@ -64,18 +83,15 @@ document.addEventListener('DOMContentLoaded', function() {
     return `${y}-${m}`;
   }
 
-  function getMonthStrFromInput(){
-    return (monthInput && monthInput.value) ? monthInput.value : getMonthStr();
-  }
-
   function initMonthInput(){
-    if(monthInput) monthInput.value = getMonthStr();
+    const cur = getMonthStr();
+    if(monthInput) monthInput.value = cur;
   }
 
   // fetch totals for selected month
   async function fetchMonthTotals(monthStr){
-    const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || "").trim();
-    const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || "").trim();
+    const url = (apiUrlInput.value || localStorage.getItem(LS_API) || "").trim();
+    const token = (apiTokenInput.value || localStorage.getItem(LS_TOKEN) || "").trim();
     if(!url) {
       console.warn("No API URL configured");
       return null;
@@ -87,6 +103,7 @@ document.addEventListener('DOMContentLoaded', function() {
     return j;
   }
 
+  // format utilities
   function fracToHHMM(frac){
     if(!frac) return "00:00";
     const totalMin = Math.round(frac * 24 * 60);
@@ -94,39 +111,45 @@ document.addEventListener('DOMContentLoaded', function() {
     const mm = totalMin % 60;
     return ("0"+hh).slice(-2)+":"+("0"+mm).slice(-2);
   }
-
+  function formatDateHuman(isoDate){
+    const d = new Date(isoDate);
+    return d.toLocaleDateString();
+  }
   function isoToday(){
     const d = new Date();
     return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
   }
-
   function timeNowHHmm(){
     const d = new Date();
     return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
   }
 
-  // render functions
+  // render routines
   function renderDailyFromMonthData(monthJson){
-    d_date && (d_date.textContent = (new Date()).toLocaleDateString());
     const todayKey = isoToday();
+    d_date.textContent = (new Date()).toLocaleDateString();
     let entry = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === todayKey) : null;
-    d_worked && (d_worked.textContent = entry ? entry.worked_text || "00:00" : "00:00");
-    // other fields are computed in the sheet; placeholder text:
-    d_entry && (d_entry.textContent = "— (editar en Drive)");
-    d_exit && (d_exit.textContent = "— (editar en Drive)");
-    d_total_break && (d_total_break.textContent = "— (editar en Drive)");
-    d_used_break && (d_used_break.textContent = "— (editar en Drive)");
-    d_avail_break && (d_avail_break.textContent = "—");
-    d_debt && (d_debt.textContent = "—");
+    if(entry){
+      d_worked.textContent = entry.worked_text || "00:00";
+    } else {
+      d_worked.textContent = "00:00";
+    }
+    d_entry.textContent = "— (editar en Drive)";
+    d_exit.textContent = "— (editar en Drive)";
+    d_total_break.textContent = "— (editar en Drive)";
+    d_used_break.textContent = "— (editar en Drive)";
+    d_avail_break.textContent = "—";
+    d_debt.textContent = "—";
   }
 
   function renderWeeklyFromMonthData(monthJson){
     if(!weeklyGrid) return;
     weeklyGrid.innerHTML = "";
     const today = new Date();
-    const wd = today.getDay(); // 0..6
+    const monday = new Date(today);
+    const wd = today.getDay();
     const offset = (wd === 0) ? -6 : (1 - wd);
-    const monday = new Date(today); monday.setDate(today.getDate() + offset);
+    monday.setDate(today.getDate() + offset);
 
     for(let i=0;i<5;i++){
       const d = new Date(monday);
@@ -177,19 +200,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // refresh view
+  // load & render full view for current selected month
   async function refreshAll(){
     try{
       const monthStr = getMonthStrFromInput();
       const [y,m] = monthStr.split("-");
       const d = new Date(parseInt(y,10), parseInt(m,10)-1, 1);
       if(monthLabel) monthLabel.textContent = d.toLocaleString(undefined, { month:'long', year:'numeric' });
-
       const json = await fetchMonthTotals(monthStr);
-      if(!json){
-        d_worked && (d_worked.textContent = "00:00");
-        weeklyGrid && (weeklyGrid.innerHTML = "");
-        monthlyGrid && (monthlyGrid.innerHTML = "");
+      if(!json) {
+        if(d_worked) d_worked.textContent = "00:00";
+        if(weeklyGrid) weeklyGrid.innerHTML = "";
+        if(monthlyGrid) monthlyGrid.innerHTML = "";
         return;
       }
       renderDailyFromMonthData(json);
@@ -197,52 +219,40 @@ document.addEventListener('DOMContentLoaded', function() {
       buildMonthlyGrid(json, parseInt(y,10), parseInt(m,10)-1);
     }catch(err){
       console.error(err);
-      alert("Error cargando datos: " + (err && err.message ? err.message : err));
+      // no alert masiva, solo en consola
+      // pero si quieres aviso:
+      // alert("Error cargando datos: " + err.message);
     }
   }
 
-// POST helper to add ficha (send as application/x-www-form-urlencoded to avoid preflight)
-async function postFicha(payload){
-  const url = (apiUrlInput.value || localStorage.getItem(LS_API) || "").trim();
-  const token = (apiTokenInput.value || localStorage.getItem(LS_TOKEN) || "").trim();
-  if(!url) return alert("Configura la API URL en el engranaje");
-  const p = Object.assign({}, payload);
-  if(token) p.token = token;
+  // POST helper to add ficha (send as application/x-www-form-urlencoded to avoid preflight)
+  async function postFicha(payload){
+    const url = (apiUrlInput.value || localStorage.getItem(LS_API) || "").trim();
+    const token = (apiTokenInput.value || localStorage.getItem(LS_TOKEN) || "").trim();
+    if(!url) return alert("Configura la API URL en el engranaje");
+    const p = Object.assign({}, payload);
+    if(token) p.token = token;
 
-  // build form body
-  const form = new URLSearchParams();
-  for (const k in p) {
-    if (Object.prototype.hasOwnProperty.call(p, k)) form.append(k, p[k]);
+    // build form body
+    const form = new URLSearchParams();
+    for (const k in p) {
+      if (Object.prototype.hasOwnProperty.call(p, k)) form.append(k, p[k]);
+    }
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString()
+    });
+
+    let j;
+    try { j = await resp.json(); } catch(e){ throw new Error("invalid server response"); }
+
+    if (j && j.ok) return true;
+    throw new Error(j && j.error ? j.error : "error en servidor");
   }
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form.toString()
-  });
-
-  // try parse json response
-  let j;
-  try { j = await resp.json(); } catch(e){ throw new Error("invalid server response"); }
-
-  if (j && j.ok) return true;
-  throw new Error(j && j.error ? j.error : "error en servidor");
-}
-
-  // --- event wiring ---
-  if(gearBtn) gearBtn.addEventListener('click', toggleConfig);
-  if(saveConfigBtn) saveConfigBtn.addEventListener('click', saveConfig);
-  if(testConfigBtn) testConfigBtn.addEventListener('click', async function(){
-    try{
-      const url = apiUrlInput.value.trim();
-      const token = apiTokenInput.value.trim();
-      if(!url) return alert("Introduce API URL");
-      const resp = await fetch(url + '?month=' + getMonthStr() + '&token=' + encodeURIComponent(token));
-      const j = await resp.json();
-      alert("Respuesta recibida: " + (j.month || "OK"));
-    }catch(err){ alert("Error probando API: " + (err && err.message ? err.message : err)); }
-  });
-
+  // button handlers
   if(btnEntry) btnEntry.addEventListener('click', async function(){
     if(!confirm("Registrar ENTRADA rápida (nota: WORKING)?")) return;
     const fecha = isoToday();
@@ -251,17 +261,17 @@ async function postFicha(payload){
     try{
       await postFicha(payload);
       await refreshAll();
-    }catch(err){ alert("Error al crear fichaje: " + (err && err.message ? err.message : err)); }
+    }catch(err){ alert("Error al crear fichaje: " + err.message); }
   });
 
-  if(btnExit){
-    btnExit.addEventListener('click', function(){
-      if(exitModal) exitModal.classList.remove('hidden');
-    });
-  }
-  if(exitCancel) exitCancel.addEventListener('click', function(){ if(exitModal) exitModal.classList.add('hidden'); });
+  if(btnExit) btnExit.addEventListener('click', function(){
+    if(exitModal) exitModal.classList.remove('hidden');
+  });
 
-  // exit option buttons (assume buttons have class .exit-option and data-note)
+  if(exitCancel) exitCancel.addEventListener('click', function(){
+    if(exitModal) exitModal.classList.add('hidden');
+  });
+
   document.querySelectorAll('.exit-option').forEach(btn=>{
     btn.addEventListener('click', async function(e){
       const note = e.currentTarget.dataset.note || "BREAK";
@@ -273,7 +283,7 @@ async function postFicha(payload){
         await postFicha(payload);
         await refreshAll();
       }catch(err){
-        alert("Error al crear fichaje: " + (err && err.message ? err.message : err));
+        alert("Error al crear fichaje: " + err.message);
       }
     });
   });
@@ -299,22 +309,26 @@ async function postFicha(payload){
 
   if(monthInput) monthInput.addEventListener('change', refreshAll);
 
-  // ensure modal hidden initially (defensive)
-  if(exitModal) exitModal.classList.add('hidden');
-  if(configPanel) configPanel.classList.add('hidden');
-
-  // initial load
+  // initialization
   loadConfig();
   initMonthInput();
   refreshAll();
 
-}); // end DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function(){
+    loadConfig();
+  });
+
+})();
 
 // -------------------- Service Worker registration --------------------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('./service-worker.js')
-      .then(reg => { console.log('ServiceWorker registrado:', reg.scope); })
-      .catch(err => { console.warn('ServiceWorker NO registrado:', err); });
+      .then(reg => {
+        console.log('ServiceWorker registrado:', reg.scope);
+      })
+      .catch(err => {
+        console.warn('ServiceWorker NO registrado:', err);
+      });
   });
 }

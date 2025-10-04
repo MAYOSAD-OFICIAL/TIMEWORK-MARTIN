@@ -3,38 +3,107 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TimeWork — MARTÍN</title>
-  <link rel="manifest" href="/manifest.json" />
+  <title>TimeWork (MARTÍN)</title>
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="container">
-    <h1>TimeWork (MARTÍN)</h1>
-
-    <section class="config">
-      <label>Mes (YYYY-MM):
-        <input id="inpMonth" type="month" value="">
-      </label>
-
-      <label>API URL:
-        <input id="inpApi" type="text" value="https://script.google.com/macros/s/AKfycbxCyzzC3fr5RpdI5s0XrsRI_snRaYM5ApBWcaWE1zEhy0nqgSI1hKnOw39ZIZBbe8tKeA/exec">
-      </label>
-
-      <label>Token:
-        <input id="inpToken" type="text" value="MartinTimeWork">
-      </label>
-
-      <div class="buttons">
-        <button id="btnSave">Guardar configuración</button>
-        <button id="btnLoad">Cargar totales</button>
+  <div id="app">
+    <header class="topbar">
+      <div class="title-area">
+        <h1 id="mainTitle">Bienvenido MARTÍN a TIMEWORK</h1>
+        <p class="subtitle">Registra todos tus fichajes y lleva el control</p>
       </div>
-    </section>
 
-    <section id="resultArea" class="result">
-      <pre id="rawJson" style="display:none"></pre>
-      <div id="calendarRoot"></div>
-    </section>
-  </main>
+      <div class="header-controls">
+        <div class="month-control">
+          <label for="monthInput">Mes</label>
+          <input id="monthInput" type="month" />
+        </div>
+
+        <button id="gearBtn" title="Configuración" class="gear">⚙</button>
+      </div>
+    </header>
+
+    <!-- panel configuración (oculto por defecto) -->
+    <div id="configPanel" class="config-panel hidden">
+      <div class="config-row">
+        <label for="apiUrl">API URL:</label>
+        <input id="apiUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec" />
+      </div>
+      <div class="config-row">
+        <label for="apiToken">Token:</label>
+        <input id="apiToken" type="text" placeholder="TimeWork2025" />
+      </div>
+      <div class="config-actions">
+        <button id="saveConfig" class="btn primary">Guardar configuración</button>
+        <button id="testConfig" class="btn">Probar API</button>
+      </div>
+    </div>
+
+    <main class="content">
+
+      <!-- Resumen diario -->
+      <section class="card daily-summary" id="dailyCard">
+        <h2>Resumen diario</h2>
+        <table class="daily-table">
+          <tr><td>Fecha (hoy)</td><td id="d_date">-</td></tr>
+          <tr><td>Entrada</td><td id="d_entry">— (editar en Drive)</td></tr>
+          <tr><td>Descanso total</td><td id="d_total_break">— (editar en Drive)</td></tr>
+          <tr><td>Descanso usado</td><td id="d_used_break">— (editar en Drive)</td></tr>
+          <tr><td>Descanso disponible</td><td id="d_avail_break">—</td></tr>
+          <tr><td>Salida</td><td id="d_exit">— (editar en Drive)</td></tr>
+          <tr><td>Horas a deber</td><td id="d_debt">—</td></tr>
+          <tr class="bold"><td>Trabajado total</td><td id="d_worked">00:00</td></tr>
+        </table>
+      </section>
+
+      <!-- botones de fichaje -->
+      <section class="actions-row">
+        <button id="btnEntry" class="btn large primary">ENTRADA</button>
+        <button id="btnExit" class="btn large">SALIDA</button>
+      </section>
+
+      <!-- resumen semanal -->
+      <section class="card weekly-summary">
+        <h2>Resumen semanal</h2>
+        <div id="weeklyGrid" class="grid-week">
+          <!-- se rellenará con JS -->
+        </div>
+      </section>
+
+      <!-- resumen mensual -->
+      <section class="card monthly-summary">
+        <div class="month-nav">
+          <button id="prevMonth" class="btn small">◀</button>
+          <div id="monthLabel" class="monthLabel">—</div>
+          <button id="nextMonth" class="btn small">▶</button>
+        </div>
+        <div id="monthlyGrid" class="grid-month">
+          <!-- tabla LUN..VIE generada por JS -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- modal para elegir tipo de salida -->
+    <div id="exitModal" class="modal hidden">
+      <div class="modal-body">
+        <h3>Tipo de salida</h3>
+        <div class="exit-options">
+          <button class="exit-option btn" data-note="DESAYUNO">DESAYUNO</button>
+          <button class="exit-option btn" data-note="ALMUERZO">ALMUERZO</button>
+          <button class="exit-option btn" data-note="COMIDA">COMIDA</button>
+          <button class="exit-option btn" data-note="BREAK">BREAK</button>
+        </div>
+        <div class="modal-actions">
+          <button id="exitCancel" class="btn">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">App web ligera — usa tu Drive para editar fichajes</footer>
+  </div>
 
   <script src="app.js"></script>
 </body>

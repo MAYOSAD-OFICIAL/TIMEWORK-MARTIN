@@ -38,6 +38,25 @@
 
   function $(id){ return document.getElementById(id); }
 
+  // --- FIX: asegurar modal oculto al inicio y comportamiento de cierre ---
+  if(exitModal){
+    // Forzar oculto en carga (protección contra versiones anteriores que pudieron dejarlo visible)
+    exitModal.classList.add('hidden');
+
+    // Cerrar si el usuario hace click en el overlay (clic fuera del cuadro)
+    exitModal.addEventListener('click', function(e){
+      if(e.target === exitModal){ exitModal.classList.add('hidden'); }
+    });
+
+    // Cerrar con Escape
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !exitModal.classList.contains('hidden')){
+        exitModal.classList.add('hidden');
+      }
+    });
+  }
+  // --- end FIX ---
+
   // cargar/guardar config
   function loadConfig(){
     const url = localStorage.getItem(LS_API) || "";
@@ -206,9 +225,9 @@
       if(monthLabel) monthLabel.textContent = d.toLocaleString(undefined, { month:'long', year:'numeric' });
       const json = await fetchMonthTotals(monthStr);
       if(!json){
-        d_worked.textContent = "00:00";
-        weeklyGrid.innerHTML = "";
-        monthlyGrid.innerHTML = "";
+        if(d_worked) d_worked.textContent = "00:00";
+        if(weeklyGrid) weeklyGrid.innerHTML = "";
+        if(monthlyGrid) monthlyGrid.innerHTML = "";
         return;
       }
       renderDailyFromMonthData(json);

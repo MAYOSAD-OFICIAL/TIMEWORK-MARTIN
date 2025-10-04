@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TimeWork — MARTÍN</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>TimeWork (MARTÍN)</h1>
+
+    <section class="config">
+      <label>Mes (YYYY-MM):
+        <input id="inpMonth" type="month" value="">
+      </label>
+
+      <label>API URL:
+        <input id="inpApi" type="text" value="https://script.google.com/macros/s/AKfycbxCyzzC3fr5RpdI5s0XrsRI_snRaYM5ApBWcaWE1zEhy0nqgSI1hKnOw39ZIZBbe8tKeA/exec">
+      </label>
+
+      <label>Token:
+        <input id="inpToken" type="text" value="MartinTimeWork">
+      </label>
+
+      <div class="buttons">
+        <button id="btnSave">Guardar configuración</button>
+        <button id="btnLoad">Cargar totales</button>
+      </div>
+    </section>
+
+    <section id="resultArea" class="result">
+      <pre id="rawJson" style="display:none"></pre>
+      <div id="calendarRoot"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

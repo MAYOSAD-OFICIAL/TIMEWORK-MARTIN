@@ -211,7 +211,7 @@
     return { url, token };
   }
 
-  // >>>>>>> CAMBIO: POST sin headers usando URLSearchParams
+  // POST sin headers usando URLSearchParams (evita preflight)
   async function apiOpen(ts, note){
     const { url, token } = getApiCfg();
     const d = new Date(ts);
@@ -223,11 +223,13 @@
     if(token) p.set('token', token);
 
     const resp = await fetch(url, { method:'POST', body: p });
-    const json = await resp.json();
-    if(!resp.ok || !json.ok) throw new Error(json.error || 'Error open');
+    let json = {};
+    try { json = await resp.json(); } catch { }
+    if(!resp.ok || !json.ok) throw new Error((json && json.error) || 'Error open');
+    return json; // {ok:true, row:n, ...}
   }
 
-  // >>>>>>> CAMBIO: POST sin headers usando URLSearchParams
+  // POST sin headers usando URLSearchParams (evita preflight)
   async function apiClose(ts, note){
     const { url, token } = getApiCfg();
     const d = new Date(ts);
@@ -239,8 +241,10 @@
     if(token) p.set('token', token);
 
     const resp = await fetch(url, { method:'POST', body: p });
-    const json = await resp.json();
-    if(!resp.ok || !json.ok) throw new Error(json.error || 'Error close_last');
+    let json = {};
+    try { json = await resp.json(); } catch { }
+    if(!resp.ok || !json.ok) throw new Error((json && json.error) || 'Error close_last');
+    return json;
   }
 
   // ---------- Botones ENTRADA/SALIDA ----------
@@ -250,14 +254,14 @@
       const now = new Date();
 
       if(!active){
-        await apiOpen(now.getTime(), 'WORKING');
+        const j = await apiOpen(now.getTime(), 'WORKING');
         setActive({ note:'WORKING', ts: now.getTime() });
-        toast('ENTRADA registrada (WORKING).');
+        toast(`ENTRADA (fila ${j.row || '?'})`);
       } else if(active.note !== 'WORKING'){
-        await apiClose(now.getTime(), active.note);
-        await apiOpen(now.getTime(), 'WORKING');
+        const jc = await apiClose(now.getTime(), active.note);
+        const jo = await apiOpen(now.getTime(), 'WORKING');
         setActive({ note:'WORKING', ts: now.getTime() });
-        toast(`Fin de ${active.note}. Vuelta a WORKING.`);
+        toast(`Fin de ${active.note} (fila ${jc.row || '?'}) · Inicio WORKING (fila ${jo.row || '?'})`);
       } else {
         toast('Ya estás en WORKING.');
       }
@@ -276,19 +280,19 @@
       const now = new Date();
 
       if(active && active.note === 'WORKING'){
-        await apiClose(now.getTime(), 'WORKING');
-        await apiOpen(now.getTime(), note);
+        const jc = await apiClose(now.getTime(), 'WORKING');
+        const jo = await apiOpen(now.getTime(), note);
         setActive({ note, ts: now.getTime() });
-        toast(`Inicio de ${note}.`);
+        toast(`Fin WORKING (fila ${jc.row || '?'}) · Inicio ${note} (fila ${jo.row || '?'})`);
       } else if(active && active.note !== 'WORKING'){
-        await apiClose(now.getTime(), active.note);
-        await apiOpen(now.getTime(), note);
+        const jc = await apiClose(now.getTime(), active.note);
+        const jo = await apiOpen(now.getTime(), note);
         setActive({ note, ts: now.getTime() });
-        toast(`Cambio de ${active.note} → ${note}.`);
+        toast(`Cambio ${active.note}→${note} (cerrada fila ${jc.row || '?'}, abierta fila ${jo.row || '?'})`);
       } else {
-        await apiOpen(now.getTime(), note);
+        const jo = await apiOpen(now.getTime(), note);
         setActive({ note, ts: now.getTime() });
-        toast(`Inicio de ${note}.`);
+        toast(`Inicio de ${note} (fila ${jo.row || '?'})`);
       }
 
       closeExitModal();

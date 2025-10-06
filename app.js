@@ -211,32 +211,34 @@
     return { url, token };
   }
 
+  // >>>>>>> CAMBIO: POST sin headers usando URLSearchParams
   async function apiOpen(ts, note){
     const { url, token } = getApiCfg();
     const d = new Date(ts);
-    const payload = {
-      action: 'open',
-      fecha: `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`,
-      entrada_time: `${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}:${('0'+d.getSeconds()).slice(-2)}`,
-      nota: note
-    };
-    if(token) payload.token = token;
-    const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const p = new URLSearchParams();
+    p.set('action','open');
+    p.set('fecha', `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`);
+    p.set('entrada_time', `${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}:${('0'+d.getSeconds()).slice(-2)}`);
+    p.set('nota', note);
+    if(token) p.set('token', token);
+
+    const resp = await fetch(url, { method:'POST', body: p });
     const json = await resp.json();
     if(!resp.ok || !json.ok) throw new Error(json.error || 'Error open');
   }
 
+  // >>>>>>> CAMBIO: POST sin headers usando URLSearchParams
   async function apiClose(ts, note){
     const { url, token } = getApiCfg();
     const d = new Date(ts);
-    const payload = {
-      action: 'close_last',
-      fecha: `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`,
-      salida_time: `${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}:${('0'+d.getSeconds()).slice(-2)}`,
-      nota: note
-    };
-    if(token) payload.token = token;
-    const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const p = new URLSearchParams();
+    p.set('action','close_last');
+    p.set('fecha', `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`);
+    p.set('salida_time', `${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}:${('0'+d.getSeconds()).slice(-2)}`);
+    p.set('nota', note);
+    if(token) p.set('token', token);
+
+    const resp = await fetch(url, { method:'POST', body: p });
     const json = await resp.json();
     if(!resp.ok || !json.ok) throw new Error(json.error || 'Error close_last');
   }

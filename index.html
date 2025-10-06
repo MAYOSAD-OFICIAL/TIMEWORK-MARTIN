@@ -94,17 +94,19 @@
 
     <!-- modal para elegir tipo de salida -->
     <div id="exitModal" class="modal hidden">
-      <div class="modal-body">
+      <div class="modal-card">
         <h3>Tipo de salida</h3>
-        <div class="exit-options">
-          <button class="exit-option btn" data-note="DESAYUNO">DESAYUNO</button>
-          <button class="exit-option btn" data-note="ALMUERZO">ALMUERZO</button>
-          <button class="exit-option btn" data-note="COMIDA">COMIDA</button>
-          <button class="exit-option btn" data-note="BREAK">BREAK</button>
-        </div>
-        <div class="modal-actions">
-          <button id="exitCancel" class="btn">Cancelar</button>
-        </div>
+
+        <!-- Botones de descanso (mantienen data-note) -->
+        <button type="button" class="exit-option" data-note="DESAYUNO">DESAYUNO</button>
+        <button type="button" class="exit-option" data-note="ALMUERZO">ALMUERZO</button>
+        <button type="button" class="exit-option" data-note="COMIDA">COMIDA</button>
+        <button type="button" class="exit-option" data-note="BREAK">BREAK</button>
+
+        <!-- NUEVO: Fin de jornada (misma estética) -->
+        <button type="button" class="exit-option finish-day" id="exitFinish">FIN JORNADA</button>
+
+        <button type="button" id="exitCancel" class="cancel">Cancelar</button>
       </div>
     </div>
 

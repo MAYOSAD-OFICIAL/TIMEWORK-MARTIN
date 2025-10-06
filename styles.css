@@ -175,3 +175,72 @@ body{
 .hidden { display: none !important; }
 .modal.hidden { display: none !important; }
 /* ======================================= */
+
+/* === Modal overlay (restaurado) === */
+.modal{
+  position: fixed;
+  inset: 0;                 /* top:0 right:0 bottom:0 left:0 */
+  display: flex;            /* centrado */
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0,0,0,.45); /* velo */
+  z-index: 1000;
+}
+.modal.hidden{ display: none; } /* el JS ya alterna .hidden */
+
+/* Tarjeta del modal */
+.modal-card{
+  width: min(92vw, 520px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.25);
+  padding: 22px;
+}
+
+/* Título */
+.modal-card h3{
+  margin: 0 0 14px 0;
+  font-size: 24px;
+  color: #1d524f;
+}
+
+/* Botones en columna, ocupando ancho completo */
+.modal-card .exit-option,
+.modal-card #exitFinish{
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-weight: 600;
+  border: 2px solid #2f9fa0;
+  color: #2f9fa0;
+  background: #eaf7f7;
+  border-radius: 12px;
+  padding: 12px 10px;
+  margin: 8px 0;            /* separaciones verticales */
+  cursor: pointer;
+}
+
+/* Resaltar FIN JORNADA */
+.modal-card #exitFinish{
+  background: #ffecec;
+  border-color: #e25b5b;
+  color: #c64b4b;
+}
+
+/* Botón cancelar estilo secundario */
+.modal-card .cancel{
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  background: #f0f4f5;
+  border: 0;
+  color: #355a58;
+  border-radius: 12px;
+  padding: 12px 10px;
+  cursor: pointer;
+}
+
+/* Asegura que exista utilidad .hidden en general */
+.hidden{ display:none !important; }
+

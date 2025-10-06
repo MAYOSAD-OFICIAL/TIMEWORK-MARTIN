@@ -16,6 +16,7 @@
   const btnExit = document.getElementById('btnExit');
   const exitModal = document.getElementById('exitModal');
   const exitCancel = document.getElementById('exitCancel');
+  const exitFinish = document.getElementById('exitFinish'); // <— NUEVO: botón FIN JORNADA
 
   const d_date = document.getElementById('d_date');
   const d_worked = document.getElementById('d_worked');
@@ -302,6 +303,40 @@
     }
   }
 
+  // ---------- NUEVO: Fin de jornada (cierra lo abierto y no abre nada) ----------
+  async function onFinishDay(){
+    try{
+      const active = getActive();
+      const now = new Date();
+
+      if(!active){
+        toast('No hay nada abierto. Jornada ya finalizada.');
+        closeExitModal();
+        return;
+      }
+
+      // Si estás en descanso, confirmamos antes de cerrar
+      if(active.note !== 'WORKING'){
+        const ok = confirm(`Estás en ${active.note}. ¿Cerrar este descanso y finalizar la jornada?`);
+        if(!ok) return;
+      }
+
+      try {
+        const jc = await apiClose(now.getTime(), active.note);
+        toast(`Cerrado ${active.note} (fila ${jc.row || '?'}) · Jornada finalizada.`);
+      } catch(e) {
+        console.warn('No se encontró fila abierta para cerrar. Continúo:', e);
+        toast('Jornada finalizada.');
+      }
+
+      clearActive();
+      closeExitModal();
+      await refreshAll();
+    } catch(err){
+      alert('Error FIN JORNADA: ' + err.message);
+    }
+  }
+
   // ---------- Month navigation ----------
   function setMonthInputToCurrent() {
     if (!monthInput) return;
@@ -338,9 +373,13 @@
     if (btnExit) btnExit.addEventListener('click', openExitModal);
     if (exitCancel) exitCancel.addEventListener('click', closeExitModal);
 
-    document.querySelectorAll('.exit-option').forEach(btn => {
-      btn.addEventListener('click', e => onExitOptionSelected(e.currentTarget.dataset.note || 'BREAK'));
+    // Importante: solo las opciones con data-note son descansos.
+    document.querySelectorAll('.exit-option[data-note]').forEach(btn => {
+      btn.addEventListener('click', e => onExitOptionSelected(e.currentTarget.dataset.note));
     });
+
+    // FIN JORNADA
+    if (exitFinish) exitFinish.addEventListener('click', onFinishDay);
 
     if (prevMonth) prevMonth.addEventListener('click', () => shiftMonth(-1));
     if (nextMonth) nextMonth.addEventListener('click', () => shiftMonth(1));

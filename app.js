@@ -1,5 +1,4 @@
-// app.js - PWA frontend completo para TimeWork
-// (pegalo entero en tu archivo app.js)
+// app.js - PWA frontend completo (modelo abrir/cerrar fila)
 
 (function () {
   'use strict';
@@ -33,9 +32,10 @@
   const prevMonth = document.getElementById('prevMonth');
   const nextMonth = document.getElementById('nextMonth');
 
-  // localStorage keys
+  // ---------- localStorage keys ----------
   const LS_API = 'tw_api_url_v1';
   const LS_TOKEN = 'tw_api_token_v1';
+  const LS_ACTIVE = 'tw_active_v1'; // { note: 'WORKING'|'DESAYUNO'|'ALMUERZO'|'COMIDA'|'BREAK', ts:number }
 
   // ---- utilidades de fecha/tiempo ----
   function getMonthStr() {
@@ -44,30 +44,13 @@
     const m = ('0' + (d.getMonth() + 1)).slice(-2);
     return `${y}-${m}`;
   }
-
   function isoToday() {
     const d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
-
-  function timeNowHHmm() {
+  function timeNowHHMMSS() {
     const d = new Date();
-    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-  }
-
-  function fracToHHMM(frac) {
-    if (!frac && frac !== 0) return '00:00';
-    const totalMin = Math.round(frac * 24 * 60);
-    const hh = Math.floor(totalMin / 60);
-    const mm = totalMin % 60;
-    return ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
-  }
-
-  function formatDateHuman(isoDate) {
-    if (!isoDate) return '';
-    const d = new Date(isoDate);
-    if (isNaN(d.getTime())) return isoDate;
-    return d.toLocaleDateString();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
   }
 
   // ---------- Config load/save ----------
@@ -81,7 +64,6 @@
       console.warn('loadConfig err', err);
     }
   }
-
   function saveConfig() {
     try {
       if (apiUrlInput) localStorage.setItem(LS_API, apiUrlInput.value.trim());
@@ -91,13 +73,22 @@
       console.warn('saveConfig err', err);
     }
   }
-
   function toggleConfig() {
     if (!configPanel) return;
     configPanel.classList.toggle('hidden');
   }
 
-  // ---------- Fetch month totals (GET) ----------
+  // ---------- Helpers activos ----------
+  function getActive() {
+    try {
+      const raw = localStorage.getItem(LS_ACTIVE);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+  function setActive(obj) { localStorage.setItem(LS_ACTIVE, JSON.stringify(obj)); }
+  function clearActive() { localStorage.removeItem(LS_ACTIVE); }
+
+  // ---------- GET: mes ----------
   async function fetchMonthTotals(monthStr) {
     const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || '').trim();
     const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || '').trim();
@@ -108,56 +99,30 @@
     const q = url + '?month=' + encodeURIComponent(monthStr) + (token ? ('&token=' + encodeURIComponent(token)) : '');
     const resp = await fetch(q);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const j = await resp.json();
-    return j;
+    return await resp.json();
   }
 
-  // ---------- Render helpers ----------
+  // ---------- Render ----------
   function renderDailyFromMonthData(monthJson) {
-    // show date
     if (d_date) d_date.textContent = (new Date()).toLocaleDateString();
-
-    // prefer daily_summary if present
     const ds = (monthJson && monthJson.daily_summary) ? monthJson.daily_summary : null;
-
-    function showOrDash(value, driveHint) {
-      if (value === null || value === undefined || value === '') {
-        return driveHint ? '— (editar en Drive)' : '—';
-      }
-      return value;
-    }
-
-    // entrada / salida / descanso: use daily_summary if available
+    function showOrDash(v){ return (v===null||v===undefined||v==='') ? '—' : v; }
     if (ds) {
-      if (d_entry) d_entry.textContent = showOrDash(ds.entrada, true);
-      if (d_exit) d_exit.textContent = showOrDash(ds.salida, true);
-      if (d_total_break) d_total_break.textContent = showOrDash(ds.descanso_total, true);
-      if (d_used_break) d_used_break.textContent = showOrDash(ds.descanso_usado, true);
-      if (d_avail_break) d_avail_break.textContent = showOrDash(ds.descanso_disponible, true);
-      if (d_debt) d_debt.textContent = showOrDash(ds.horas_a_deber, true);
-      if (d_worked) {
-        // prefer daily_summary.trabajado_total, else fallback to days array for today
-        if (ds.trabajado_total) d_worked.textContent = ds.trabajado_total;
-        else {
-          // fallback: search today's worked_text
-          const today = isoToday();
-          const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === today) : null;
-          d_worked.textContent = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
-        }
-      }
+      if (d_entry) d_entry.textContent = showOrDash(ds.entrada);
+      if (d_exit) d_exit.textContent = showOrDash(ds.salida);
+      if (d_total_break) d_total_break.textContent = showOrDash(ds.descanso_total);
+      if (d_used_break) d_used_break.textContent = showOrDash(ds.descanso_usado);
+      if (d_avail_break) d_avail_break.textContent = showOrDash(ds.descanso_disponible);
+      if (d_debt) d_debt.textContent = showOrDash(ds.horas_a_deber);
+      if (d_worked) d_worked.textContent = showOrDash(ds.trabajado_total);
     } else {
-      // no daily summary: show default/hints and worked total from month data
-      if (d_entry) d_entry.textContent = '— (editar en Drive)';
-      if (d_exit) d_exit.textContent = '— (editar en Drive)';
-      if (d_total_break) d_total_break.textContent = '— (editar en Drive)';
-      if (d_used_break) d_used_break.textContent = '— (editar en Drive)';
+      if (d_entry) d_entry.textContent = '—';
+      if (d_exit) d_exit.textContent = '—';
+      if (d_total_break) d_total_break.textContent = '—';
+      if (d_used_break) d_used_break.textContent = '—';
       if (d_avail_break) d_avail_break.textContent = '—';
       if (d_debt) d_debt.textContent = '—';
-      if (d_worked) {
-        const today = isoToday();
-        const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === today) : null;
-        d_worked.textContent = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
-      }
+      if (d_worked) d_worked.textContent = '00:00';
     }
   }
 
@@ -166,25 +131,22 @@
     weeklyGrid.innerHTML = '';
 
     const today = new Date();
-    // compute Monday of this week
-    const wd = today.getDay(); // 0..6 sun..sat
-    const offset = (wd === 0) ? -6 : (1 - wd); // make Monday
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + offset);
+    const wd = today.getDay(); // 0..6
+    const offset = (wd === 0) ? -6 : (1 - wd);
+    const monday = new Date(today); monday.setDate(today.getDate() + offset);
 
     for (let i = 0; i < 5; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
+      const d = new Date(monday); d.setDate(monday.getDate() + i);
       const key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
       const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === key) : null;
       const hours = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
 
-      const container = document.createElement('div');
-      container.className = 'week-day';
-      container.innerHTML = `<div class="wk-name">${d.toLocaleDateString(undefined, { weekday: 'long' })}</div>
-                             <div class="wk-date">${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}</div>
-                             <div class="wk-hours">${hours}</div>`;
-      weeklyGrid.appendChild(container);
+      const el = document.createElement('div');
+      el.className = 'week-day';
+      el.innerHTML = `<div class="wk-name">${d.toLocaleDateString(undefined,{weekday:'long'})}</div>
+                      <div class="wk-date">${('0'+d.getDate()).slice(-2)}/${('0'+(d.getMonth()+1)).slice(-2)}</div>
+                      <div class="wk-hours">${hours}</div>`;
+      weeklyGrid.appendChild(el);
     }
   }
 
@@ -200,20 +162,20 @@
 
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     const lastOfMonth = new Date(year, monthIndex, daysInMonth);
-    const daysFromGridStartToLast = Math.round((lastOfMonth.getTime() - gridStart.getTime()) / (24 * 3600 * 1000)) + 1;
+    const daysFromGridStartToLast = Math.round((lastOfMonth.getTime() - gridStart.getTime()) / (24*3600*1000)) + 1;
     const weeksNeeded = Math.min(6, Math.max(1, Math.ceil(daysFromGridStartToLast / 7)));
 
-    for (let w = 0; w < weeksNeeded; w++) {
-      for (let dow = 0; dow < 5; dow++) {
+    for (let w=0; w<weeksNeeded; w++){
+      for (let dow=0; dow<5; dow++){
         const d = new Date(gridStart);
-        d.setDate(gridStart.getDate() + w * 7 + dow);
+        d.setDate(gridStart.getDate() + w*7 + dow);
         const cell = document.createElement('div');
         cell.className = 'month-cell';
         if (d.getMonth() === monthIndex) {
-          const key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+          const key = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
           const dayObj = (monthJson && monthJson.days) ? monthJson.days.find(x => x.date === key) : null;
           const hoursText = dayObj ? (dayObj.worked_text || '00:00') : '00:00';
-          cell.innerHTML = `<div class="date">${('0' + d.getDate()).slice(-2)}/${('0' + (d.getMonth() + 1)).slice(-2)}/${d.getFullYear()}</div>
+          cell.innerHTML = `<div class="date">${('0'+d.getDate()).slice(-2)}/${('0'+(d.getMonth()+1)).slice(-2)}/${d.getFullYear()}</div>
                             <div class="hours">${hoursText}</div>`;
         } else {
           cell.innerHTML = `<div class="date"></div><div class="hours"></div>`;
@@ -227,102 +189,110 @@
   async function refreshAll() {
     try {
       const monthStr = (monthInput && monthInput.value) ? monthInput.value : getMonthStr();
-      // set monthLabel
       const [y, m] = monthStr.split('-');
-      const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
-      if (monthLabel) monthLabel.textContent = d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+      const d = new Date(parseInt(y,10), parseInt(m,10)-1, 1);
+      if (monthLabel) monthLabel.textContent = d.toLocaleString(undefined,{month:'long',year:'numeric'});
 
       const json = await fetchMonthTotals(monthStr);
-      if (!json) {
-        if (d_worked) d_worked.textContent = '00:00';
-        if (weeklyGrid) weeklyGrid.innerHTML = '';
-        if (monthlyGrid) monthlyGrid.innerHTML = '';
-        return;
-      }
+      if (!json) { return; }
       renderDailyFromMonthData(json);
       renderWeeklyFromMonthData(json);
-      buildMonthlyGrid(json, parseInt(y, 10), parseInt(m, 10) - 1);
+      buildMonthlyGrid(json, parseInt(y,10), parseInt(m,10)-1);
     } catch (err) {
       console.error('refreshAll err', err);
-      // show user friendly alert but avoid spamming
-      // alert('Error cargando datos: ' + err.message);
     }
   }
 
-  // ---------- POST helper (form-urlencoded) ----------
-  async function postFicha(payload) {
+  // ---------- API open/close ----------
+  function getApiCfg(){
     const url = (apiUrlInput && apiUrlInput.value) ? apiUrlInput.value.trim() : (localStorage.getItem(LS_API) || '').trim();
     const token = (apiTokenInput && apiTokenInput.value) ? apiTokenInput.value.trim() : (localStorage.getItem(LS_TOKEN) || '').trim();
-    if (!url) return alert('Configura la API URL en el engranaje');
-
-    // build application/x-www-form-urlencoded body
-    const form = new URLSearchParams();
-    for (const k in payload) {
-      if (Object.prototype.hasOwnProperty.call(payload, k)) {
-        const v = payload[k];
-        if (v !== undefined && v !== null) form.append(k, String(v));
-      }
-    }
-    if (token) form.append('token', token);
-
-    let resp;
-    try {
-      resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-        },
-        body: form.toString()
-      });
-    } catch (err) {
-      throw new Error('Failed to fetch: ' + err.message);
-    }
-
-    const text = await resp.text();
-    let json;
-    try { json = text ? JSON.parse(text) : {}; } catch (e) { json = { error: text }; }
-
-    if (!resp.ok) {
-      throw new Error(json && json.error ? json.error : ('HTTP ' + resp.status));
-    }
-    if (json && json.ok) return true;
-    throw new Error(json && json.error ? json.error : 'Respuesta inesperada del servidor');
+    if(!url) throw new Error('Configura la API URL');
+    return { url, token };
   }
 
-  // ---------- Button handlers ----------
+  async function apiOpen(ts, note){
+    const { url, token } = getApiCfg();
+    const d = new Date(ts);
+    const payload = {
+      action: 'open',
+      fecha: `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`,
+      entrada_time: `${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}:${('0'+d.getSeconds()).slice(-2)}`,
+      nota: note
+    };
+    if(token) payload.token = token;
+    const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const json = await resp.json();
+    if(!resp.ok || !json.ok) throw new Error(json.error || 'Error open');
+  }
+
+  async function apiClose(ts, note){
+    const { url, token } = getApiCfg();
+    const d = new Date(ts);
+    const payload = {
+      action: 'close_last',
+      fecha: `${d.getFullYear()}-${('0'+(d.getMonth()+1)).slice(-2)}-${('0'+d.getDate()).slice(-2)}`,
+      salida_time: `${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}:${('0'+d.getSeconds()).slice(-2)}`,
+      nota: note
+    };
+    if(token) payload.token = token;
+    const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const json = await resp.json();
+    if(!resp.ok || !json.ok) throw new Error(json.error || 'Error close_last');
+  }
+
+  // ---------- Botones ENTRADA/SALIDA ----------
   async function onEntryClicked() {
     try {
-      if (!confirm('Registrar ENTRADA rápida (nota: WORKING)?')) return;
-      const fecha = isoToday();
-      const time = timeNowHHmm();
-      const payload = { fecha: fecha, entrada: time, salida: time, nota: 'WORKING' };
-      await postFicha(payload);
+      const active = getActive();
+      const now = new Date();
+
+      if(!active){
+        await apiOpen(now.getTime(), 'WORKING');
+        setActive({ note:'WORKING', ts: now.getTime() });
+        toast('ENTRADA registrada (WORKING).');
+      } else if(active.note !== 'WORKING'){
+        await apiClose(now.getTime(), active.note);
+        await apiOpen(now.getTime(), 'WORKING');
+        setActive({ note:'WORKING', ts: now.getTime() });
+        toast(`Fin de ${active.note}. Vuelta a WORKING.`);
+      } else {
+        toast('Ya estás en WORKING.');
+      }
       await refreshAll();
     } catch (err) {
-      alert('Error al crear fichaje: ' + err.message);
+      alert('Error ENTRADA: ' + err.message);
     }
   }
 
-  function openExitModal() {
-    if (!exitModal) return;
-    exitModal.classList.remove('hidden');
-  }
+  function openExitModal() { if(exitModal) exitModal.classList.remove('hidden'); }
+  function closeExitModal(){ if(exitModal) exitModal.classList.add('hidden'); }
 
-  function closeExitModal() {
-    if (!exitModal) return;
-    exitModal.classList.add('hidden');
-  }
+  async function onExitOptionSelected(note){
+    try{
+      const active = getActive();
+      const now = new Date();
 
-  async function onExitOptionSelected(note) {
-    try {
-      const fecha = isoToday();
-      const time = timeNowHHmm();
-      const payload = { fecha: fecha, entrada: time, salida: time, nota: note };
+      if(active && active.note === 'WORKING'){
+        await apiClose(now.getTime(), 'WORKING');
+        await apiOpen(now.getTime(), note);
+        setActive({ note, ts: now.getTime() });
+        toast(`Inicio de ${note}.`);
+      } else if(active && active.note !== 'WORKING'){
+        await apiClose(now.getTime(), active.note);
+        await apiOpen(now.getTime(), note);
+        setActive({ note, ts: now.getTime() });
+        toast(`Cambio de ${active.note} → ${note}.`);
+      } else {
+        await apiOpen(now.getTime(), note);
+        setActive({ note, ts: now.getTime() });
+        toast(`Inicio de ${note}.`);
+      }
+
       closeExitModal();
-      await postFicha(payload);
       await refreshAll();
-    } catch (err) {
-      alert('Error al crear fichaje: ' + err.message);
+    } catch(err){
+      alert('Error SALIDA: ' + err.message);
     }
   }
 
@@ -331,15 +301,13 @@
     if (!monthInput) return;
     monthInput.value = getMonthStr();
   }
-
   function shiftMonth(delta) {
     if (!monthInput) return;
-    const v = monthInput.value;
-    if (!v) return;
+    const v = monthInput.value || getMonthStr();
     const [y, mm] = v.split('-');
-    const d = new Date(parseInt(y, 10), parseInt(mm, 10) - 1, 1);
-    d.setMonth(d.getMonth() + delta);
-    monthInput.value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    const d = new Date(parseInt(y,10), parseInt(mm,10)-1, 1);
+    d.setMonth(d.getMonth()+delta);
+    monthInput.value = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2);
     refreshAll();
   }
 
@@ -364,39 +332,53 @@
     if (btnExit) btnExit.addEventListener('click', openExitModal);
     if (exitCancel) exitCancel.addEventListener('click', closeExitModal);
 
-    // exit option buttons (expect elements with class .exit-option and data-note attribute)
     document.querySelectorAll('.exit-option').forEach(btn => {
-      btn.addEventListener('click', function (e) {
-        const note = e.currentTarget.dataset.note || 'BREAK';
-        onExitOptionSelected(note);
-      });
+      btn.addEventListener('click', e => onExitOptionSelected(e.currentTarget.dataset.note || 'BREAK'));
     });
 
-    if (prevMonth) prevMonth.addEventListener('click', function () { shiftMonth(-1); });
-    if (nextMonth) nextMonth.addEventListener('click', function () { shiftMonth(1); });
+    if (prevMonth) prevMonth.addEventListener('click', () => shiftMonth(-1));
+    if (nextMonth) nextMonth.addEventListener('click', () => shiftMonth(1));
     if (monthInput) monthInput.addEventListener('change', refreshAll);
   }
 
-  // ---------- Initialization ----------
+  // ---------- Init ----------
   document.addEventListener('DOMContentLoaded', function () {
     loadConfig();
     setMonthInputToCurrent();
     wireEvents();
-    // refresh view (no alert on failure)
     refreshAll();
   });
 
-  // ---------- Service Worker registration (PWA) ----------
+  // ---------- Service Worker ----------
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('./service-worker.js')
-        .then(reg => {
-          console.log('ServiceWorker registrado:', reg.scope);
-        })
-        .catch(err => {
-          console.warn('ServiceWorker NO registrado:', err);
-        });
+      navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
     });
   }
 
-})(); // fin IIFE
+  // ---------- Mini toast ----------
+  let toastTimer = null;
+  function toast(msg){
+    let el = document.getElementById('tw-toast');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'tw-toast';
+      el.style.position = 'fixed';
+      el.style.left = '50%';
+      el.style.bottom = '24px';
+      el.style.transform = 'translateX(-50%)';
+      el.style.background = '#3aa6a4';
+      el.style.color = '#fff';
+      el.style.padding = '10px 14px';
+      el.style.borderRadius = '10px';
+      el.style.boxShadow = '0 8px 20px rgba(0,0,0,.15)';
+      el.style.zIndex = '9999';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>{ el.style.opacity = '0'; }, 1800);
+  }
+
+})();
